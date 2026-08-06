@@ -1,0 +1,14 @@
+{
+  "name": "docmgr",
+  "version": "0.1.0",
+  "description": "A CLI tool that organizes your downloads folder by file type.",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "bin": { "docmgr": "src/docmgr.js" },
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node src/docmgr.js",
+    "test": "node --test test/"
+  }
+}

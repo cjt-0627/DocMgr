@@ -1,0 +1,15 @@
+{
+  "sourceDir": "~/Downloads/test",
+  "minAgeSeconds": 10,
+  "skipExtensions": ["crdownload", "part", "download", "tmp", "partial"],
+  "neverMove": ["mobileconfig", "rgpack"],
+  "rules": {
+    "Images":     ["png", "jpg", "jpeg", "heic", "gif", "webp", "bmp", "tiff", "svg"],
+    "Documents":  ["pdf", "docx", "doc", "txt", "xls", "xlsx", "ppt", "pptx", "epub", "pages", "numbers", "key"],
+    "Archives":   ["zip", "tar", "gz", "tgz", "rar", "7z"],
+    "Installers": ["dmg", "pkg"],
+    "Media":      ["mp4", "mov", "avi", "mkv", "mp3", "wav", "m4a", "flac"],
+    "Code":       ["py", "js", "ts", "json", "html", "css", "sh", "conf", "tex", "yml", "yaml"],
+    "Projects":   ["pixil", "blend", "blend1", "sketch", "fig"]
+  }
+}
