@@ -112,6 +112,24 @@ test('undo- undo the recent apply', async () => {
     assert.ok(!(await exists(join(dl, 'Images', 'a.png'))));
 });
 
+test('undo will delete empty folders', async()=>{
+    await touch('a.png');
+    await await docmgr('apply');
+    assert.ok(await exists(join(dl, 'Images')));
+
+    await docmgr('undo');
+    assert.ok(!(await exists(join(dl, 'Images'))),'Images should be deleted');
+});
+
+truncateSync(`The folder sholudn't be deleted when there is something still inside`, async()=>{
+    await touch('a.png');
+    await docmgr('apply');
+    await writeFile(join(dl, 'Images','other.txt'), 'x');
+
+    await docmgr('undo');
+    assert.ok(await exists(join(dl,'Images')), 'Images should stay');
+});
+
 test(`undo twice, there is nothing to undo at the second time`, async () => {
     await touch('a.png');
     await docmgr('apply');

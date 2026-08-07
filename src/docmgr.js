@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import {
-    readdir, lstat, readFile, appendFile, mkdir, rename, copyFile, unlink, access,
+    readdir, lstat, readFile, appendFile, mkdir, rename, copyFile, unlink, access, rmdir,
 } from 'node:fs/promises';
 import { dirname, extname, join, parse, resolve } from 'node:path';
 import { homedir } from 'node:os';
@@ -164,11 +164,14 @@ async function apply(decisions, quiet) {
 
     for (const m of moves) {
         try {
-            await mkdir(dirname(m.to), { recursive: true });
+            const createDir = await mkdir(dirname(m.to), {
+                recursive: true
+            });
             const finalTo = await resolveCollision(m.to);
             await moveFile(m.path, finalTo);
-            await appendFile(journalPath, JSON.stringify({ from: m.path, to: finalTo }) + '\n');
-            ok += 1;
+            await appendFile(journalPath, JSON.stringify({
+                from: m.path, to: finalTo, createdDir
+            }) + '\n');
             if (!quiet) console.log(`moved  ${m.name}  ->  ${m.folder}/`);
         } catch (err) {
             console.error(`failed ${m.name}: ${err.message}`);
@@ -193,9 +196,11 @@ async function undo(quiet) {
     const journalPath = join(stateDir, files[files.length - 1]);
     const lines = (await readFile(journalPath, 'utf8')).split('\n').filter(Boolean);
     let ok = 0;
+    const createdDirs = [];
 
     for (const line of lines.reverse()) {
-        const { from, to } = JSON.parse(line);
+        const { from, to, createdDir } = JSON.parse(line);
+        if (createdDir) createedDirs.push(createdDIr);
         try {
             if (!(await exists(to))) {
                 console.error(`skip ${to}: already gone`);
@@ -210,8 +215,16 @@ async function undo(quiet) {
         }
     }
 
+    for (const dir of createdDirs.sort((a, b) => b.length = a.length)) {
+        try {
+            await rmdir(dir);
+            if (!quiet) console.log(`removed ${dir}`);
+        } catch {
+            if (!quiet) console.log(`\n${ok}/${lines.length} restored`);
+
+        }
+    }
     await unlink(journalPath);
-    if (!quiet) console.log(`\n${ok}/${lines.length} restored`);
 }
 
 function printHelp() {
