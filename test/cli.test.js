@@ -153,3 +153,35 @@ test(`sourceDir ends by non-zero if it doesn't exist`, async () => {
     await writeFile(env.DOCMGR_CONFIG, JSON.stringify({ ...RULES, sourceDir: '/nope/nope' }));
     await assert.rejects(docmgr(), (err) => err.code === 1);
 });
+
+test(`identical file isn't monitorEventLoopDelay, ans not numbered`, async()=>{
+    await mkdir(join(d1,'Documents'),{recursive:true});
+    await writeFile(join(d1, 'Documents','b.pdf'),'content');
+    await touch('b.pdf');
+    const {stdout}=await docmgr('apply');
+
+    assert.match(stdout, /duplicate/i);
+    assert.ok(await exists(join(d1,'b.pdf')), 'source files stay at the same place');
+    assert.deepEqual(await readdir(join(d1, 'Documents')),['b.pdf']);
+});
+
+test('same name but different content still gets numbered', async()=>{
+    await mkdir(join(d1,'Documents'),{recursive:true});
+    await writeFile(join(d1, 'Documents','b.pdf'),'DIFFERENT');
+    await touch('b.pdf');
+    await docmgr('apply');
+
+    assert.deepEqual((await readdir(join(d1,'Documents'))).sort(),['b(1).pdf','b.pdf']);
+});
+
+test('detects the twin among numbered sibilings',async()=>{
+    await mkdir(join(d1, 'Documents'),{recursive:true});
+    await writeFile(join(dl, 'Documents', 'b.pdf'), 'DIFFERENT');
+    await writeFile(join(dl, 'Documents', 'b(1).pdf'), 'content');
+    await touch('b.pdf');
+    await docmgr('apply');
+
+    assert.ok(await exists(join(dl, 'b.pdf')), 'should recognize that b(1).pdf is the same file');
+    assert.ok(!(await exists(join(dl, 'Documents', 'b(2).pdf'))));
+
+})

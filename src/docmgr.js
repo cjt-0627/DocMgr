@@ -2,7 +2,9 @@
 import {
     readdir, lstat, readFile, appendFile, mkdir, rename, copyFile, unlink, access, rmdir,
 } from 'node:fs/promises';
-import { dirname, extname, join, parse, resolve } from 'node:path';
+import { createReadStream } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { dirname, extname, join, parse, resolve, relative } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
@@ -108,6 +110,53 @@ function plan(candidates, lookup, config) {
     });
 }
 
+async function hashFile(path) {
+    const hash = createHash('sha256');
+    for await (const chunck of createReadStream(path)) {
+        hash.update(chunk);
+    }
+    return hash.digest('hex');
+}
+
+async function findTwin(file, targetPath) {
+    const { dir, name, ext } = parse(targetPath);
+    let candidate = targetPath;
+    let n = 0;
+    let sourceHash = null;
+
+    while (await exists(candidate)) {
+        const stats = await stat(candidate);
+        if (stats.size === file.size) {
+            sourceHash ??= await hashFile(file.path);
+            if (await hashFile(candidate) === sourceHash) return candidate;
+        }
+        n += 1;
+        candidate = join(dir, `${name}(${n})${ext}`);
+    }
+    return null;
+}
+
+async function detectDuplicates(decisions, config) {
+    const out = [];
+    for (const d of decisions) {
+        if (d.action !== 'move') {
+            out.push(d);
+            continue;
+        }
+        const twin = await findTwin(d, d.to);
+        if (twin) {
+            out.push({
+                ...d,
+                action: 'duplicate',
+                reason: `same content as ${relative(config.sourceDir, twin)}`,
+            });
+        } else {
+            out.push(d);
+        }
+    }
+    return out;
+}
+
 async function resolveCollision(targetPath) {
     const { dir, name, ext } = parse(targetPath);
     let candidate = targetPath;
@@ -132,6 +181,15 @@ async function moveFile(from, to) {
 function printPlan(decisions, skipped, quiet) {
     const moves = decisions.filter((d) => d.action === 'move');
     const keeps = decisions.filter((d) => d.action === 'keep');
+    const dupes=decisions.filter((d)=>d.action==='duplicate');
+
+
+    if(dupes.length>0){
+        console.log(`\n${dupes.length} duplicate(s), left in place:`);
+        for(const d of dupes){
+            console.log(`${d.name}\n =${d.reason}`);
+        }
+    }
 
     if (moves.length === 0) {
         console.log('nothing to move.');
@@ -271,7 +329,8 @@ async function main() {
 
     const lookup = buildLookup(config.rules);
     const { candidates, skipped } = await scan(config);
-    const decisions = plan(candidates, lookup, config);
+    const planned = plan(candidates, lookup, config);
+    const decisions = congfig.onDuplicate === 'number' ? planned : await detectDuplicates(planned, config);
 
     if (command === 'apply') await apply(decisions, quiet);
     else printPlan(decisions, skipped, quiet);
