@@ -9,6 +9,6 @@
   "engines": { "node": ">=18" },
   "scripts": {
     "start": "node src/docmgr.js",
-    "test": "node --test test/"
+    "test": "node --test \"test/*.test.js\""
   }
 }

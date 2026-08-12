@@ -164,7 +164,7 @@ async function apply(decisions, quiet) {
 
     for (const m of moves) {
         try {
-            const createDir = await mkdir(dirname(m.to), {
+            const createdDir = await mkdir(dirname(m.to), {
                 recursive: true
             });
             const finalTo = await resolveCollision(m.to);
@@ -172,6 +172,7 @@ async function apply(decisions, quiet) {
             await appendFile(journalPath, JSON.stringify({
                 from: m.path, to: finalTo, createdDir
             }) + '\n');
+            ok += 1;
             if (!quiet) console.log(`moved  ${m.name}  ->  ${m.folder}/`);
         } catch (err) {
             console.error(`failed ${m.name}: ${err.message}`);
@@ -200,7 +201,7 @@ async function undo(quiet) {
 
     for (const line of lines.reverse()) {
         const { from, to, createdDir } = JSON.parse(line);
-        if (createdDir) createedDirs.push(createdDIr);
+        if (createdDir) createdDirs.push(createdDir);
         try {
             if (!(await exists(to))) {
                 console.error(`skip ${to}: already gone`);
@@ -215,15 +216,16 @@ async function undo(quiet) {
         }
     }
 
-    for (const dir of createdDirs.sort((a, b) => b.length = a.length)) {
+    for (const dir of createdDirs.sort((a, b) => b.length - a.length)) {
         try {
             await rmdir(dir);
             if (!quiet) console.log(`removed ${dir}`);
         } catch {
-            if (!quiet) console.log(`\n${ok}/${lines.length} restored`);
-
+            // not empty (or already gone) - leave it alone
         }
     }
+
+    if (!quiet) console.log(`\n${ok}/${lines.length} restored`);
     await unlink(journalPath);
 }
 

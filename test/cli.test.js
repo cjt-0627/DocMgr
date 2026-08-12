@@ -121,7 +121,7 @@ test('undo will delete empty folders', async()=>{
     assert.ok(!(await exists(join(dl, 'Images'))),'Images should be deleted');
 });
 
-truncateSync(`The folder sholudn't be deleted when there is something still inside`, async()=>{
+test(`The folder sholudn't be deleted when there is something still inside`, async()=>{
     await touch('a.png');
     await docmgr('apply');
     await writeFile(join(dl, 'Images','other.txt'), 'x');
