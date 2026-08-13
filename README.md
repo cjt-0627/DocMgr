@@ -40,6 +40,10 @@ DocMgr is a command-line tool that sorts the files in your Downloads folder into
 
 It is built around one principle: **never surprise the user**. Running `docmgr` with no arguments only *shows* you what it would do - nothing on disk is touched until you explicitly say `apply`. And if you don't like the result, `undo` puts everything back exactly where it was, right down to removing the folders it created.
 
+### Demo
+
+[!demo video]('https://youtu.be/CCFq3lsEIt4')
+
 
 ### Key Features:
 

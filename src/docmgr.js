@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import {
-    readdir, lstat, readFile, appendFile, mkdir, rename, copyFile, unlink, access, rmdir,
+    readdir, lstat, readFile, appendFile, mkdir, rename, copyFile, unlink, access, rmdir,stat,
 } from 'node:fs/promises';
-import { createReadStream } from 'node:fs';
+import { createReadStream, realpathSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, extname, join, parse, resolve, relative } from 'node:path';
 import { homedir } from 'node:os';
@@ -112,7 +112,7 @@ function plan(candidates, lookup, config) {
 
 async function hashFile(path) {
     const hash = createHash('sha256');
-    for await (const chunck of createReadStream(path)) {
+    for await (const chunk of createReadStream(path)) {
         hash.update(chunk);
     }
     return hash.digest('hex');
@@ -181,7 +181,7 @@ async function moveFile(from, to) {
 function printPlan(decisions, skipped, quiet) {
     const moves = decisions.filter((d) => d.action === 'move');
     const keeps = decisions.filter((d) => d.action === 'keep');
-    const dupes=decisions.filter((d)=>d.action==='duplicate');
+    const dupes=decisions.filter((d) => d.action==='duplicate');
 
 
     if(dupes.length>0){
@@ -210,6 +210,14 @@ function printPlan(decisions, skipped, quiet) {
 
 async function apply(decisions, quiet) {
     const moves = decisions.filter((d) => d.action === 'move');
+    const dupes = decisions.filter((d) => d.action === 'duplicate');
+
+    if (!quiet) {
+        for (const d of dupes) {
+            console.log(`duplicate  ${d.name}  (${d.reason})`);
+        }
+    }
+
     if (moves.length === 0) {
         if (!quiet) console.log('There is no file need to be moved.');
         return;
@@ -330,15 +338,22 @@ async function main() {
     const lookup = buildLookup(config.rules);
     const { candidates, skipped } = await scan(config);
     const planned = plan(candidates, lookup, config);
-    const decisions = congfig.onDuplicate === 'number' ? planned : await detectDuplicates(planned, config);
+    const decisions = config.onDuplicate === 'number' ? planned : await detectDuplicates(planned, config);
 
     if (command === 'apply') await apply(decisions, quiet);
     else printPlan(decisions, skipped, quiet);
 }
 
-const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+function isMainModule() {
+    if (!process.argv[1]) return false;
+    try {
+        return realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
+    } catch {
+        return false;
+    }
+}
 
-if (isMain) {
+if (isMainModule()) {
     main().catch((err) => {
         console.error(err);
         process.exitCode = 1;
