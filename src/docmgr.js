@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { dirname, extname, join, parse, resolve, relative } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { stripTypeScriptTypes } from 'node:module';
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const configPath = process.env.DOCMGR_CONFIG ?? join(projectRoot, 'config.json');
@@ -36,18 +37,62 @@ async function loadConfig() {
     return config;
 }
 
-function buildLookup(rules) {
-    const lookup = new Map();
-    for (const [folder, extensions] of Object.entries(rules)) {
-        for (const ext of extensions) {
-            const key = ext.toLowerCase();
-            if (lookup.has(key)) {
-                console.warn(`warn .${key} defined at ${lookup.get(key)} and ${folder}, use ${folder}`);
+function globToRegExp(glob){
+    const body=String(glob).replace(/[.*+?^${}()|[\]\\]/g,(ch)=>{
+        if(ch === '*') return '.*';
+        if(ch === '?') return '.';
+        return `\\${ch}`;
+    });
+    return new RegExp(`^${body}$`, 'i');
+}
+
+function compileRules(rules){
+    const compiled=[];
+    const seen =new Map();
+
+    if(!rules || typeof rules !== 'object'){
+        throw new Error('config needs a "rules" object');
+    }
+
+    for(const [folder, rule] of Object.entries(rules)){
+        const spec=Array.isArray(rule)?{ext:rule}:rule;
+        if(!spec || typeof spec !=='object'){
+            throw new Error(`rule "${folder}" must be an array of extensions or an object`);
+        }
+        if(!spec.ext && !spec.match){
+            throw new Error(`rule "${folder}" needs at least one of "ext" or "match"`);
+        }
+        
+        const extensions= new Set((spec.ext ?? []).map((e)=> String(e).toLowerCase()));
+        for(const ext of extensions){
+            if(seen.has(ext)){
+                console.warn(`warn .${ext} defined at ${seen.get(ext)} and ${folder}, use ${seen.get(ext)}`);
+            }else{
+                seen.set(ext, folder);
             }
-            lookup.set(key, folder);
+        }
+
+        const globs=spec.match ?? [];
+        compiled.push({folder, extensions, globs, patterns: globs.map(globToRegExp)});
+    }
+
+    return compiled;
+}
+
+function matchRule(file, rules){
+    for(const rule of rules){
+        for (let i=0;i<rule.patterns.length;i+=1){
+            if(rule.patterns[i].test(file.name)){
+                return {folder:rule.folder, pattern:rule.globs[i]};
+            }
         }
     }
-    return lookup;
+    if(file.ext === '') return null;
+    for(const rule of rules){
+        if(rule.extensions.has(file.ext)) return {folder:rule.folder, pattern:null};
+    }
+    return null;
+    
 }
 
 async function scan(config) {
@@ -90,24 +135,28 @@ async function scan(config) {
     return { candidates, skipped };
 }
 
-function plan(candidates, lookup, config) {
-    const neverMove = new Set((config.neverMove ?? []).map((e) => e.toLowerCase()));
+function plan(candidates, rules, config){
+    const neverMove=new Set((config.neverMove ?? []).map((e)=>e.toLowerCase()));
 
-    return candidates.map((file) => {
-        if (file.ext === '') {
-            return { ...file, action: 'keep', reason: 'no file extension' };
-        }
-        if (neverMove.has(file.ext)) {
-            return { ...file, action: 'keep', reason: `.${file.ext} is set to never move` };
+    return candidates.map((file)=>{
+        if(file.ext !== '' && neverMove.has(file.ext)){
+            return {...file, action: 'keep', reason: `.${file.ext} is set to never move`};
         }
 
-        const folder = lookup.get(file.ext);
-        if (!folder) {
-            return { ...file, action: 'keep', reason: `.${file.ext} has no rule` };
+        const hit=matchRule(file, rules);
+        if(!hit){
+            const reason=file.ext ==='' ? 'no file extension' :`.${file.ext} has no rule`;
+            return {...file, action:'keep', reason};
         }
 
-        return { ...file, action: 'move', folder, to: join(config.sourceDir, folder, file.name) };
-    });
+        return{
+            ...file,
+            action:'move',
+            folder:hit.folder,
+            pattern:hit.pattern,
+            to: join(config.sourceDir, hit.folder, file.name),
+        };
+    })
 }
 
 async function hashFile(path) {
@@ -183,7 +232,6 @@ function printPlan(decisions, skipped, quiet) {
     const keeps = decisions.filter((d) => d.action === 'keep');
     const dupes=decisions.filter((d) => d.action==='duplicate');
 
-
     if(dupes.length>0){
         console.log(`\n${dupes.length} duplicate(s), left in place:`);
         for(const d of dupes){
@@ -196,7 +244,8 @@ function printPlan(decisions, skipped, quiet) {
     } else {
         console.log(`will move ${moves.length} file(s):\n`);
         for (const m of moves) {
-            console.log(`  ${m.name}\n      -> ${m.folder}/`);
+            const why=m.pattern ? `  (name matches "${m.pattern}")` : '';
+            console.log(`  ${m.name}\n      -> ${m.folder}/${why}`);
         }
     }
 
@@ -253,7 +302,7 @@ async function undo(quiet) {
     try {
         files = (await readdir(stateDir)).filter((f) => f.endsWith('.jsonl')).sort();
     } catch {
-        // stateDir does not exist yet
+
     }
     if (files.length === 0) {
         console.log('nothing to undo');
@@ -335,14 +384,23 @@ async function main() {
         return;
     }
 
-    const lookup = buildLookup(config.rules);
-    const { candidates, skipped } = await scan(config);
-    const planned = plan(candidates, lookup, config);
+    let rules;
+    try{
+        rules=compileRules(config.rules);
+    }catch(err){
+        console.error(`config error: ${err.message}`);
+        process.exitCode=1;
+        return;
+    }
+
+    const {candidates,skipped}=await scan(config);
+    const planned=plan(candidates,rules,config);
     const decisions = config.onDuplicate === 'number' ? planned : await detectDuplicates(planned, config);
 
     if (command === 'apply') await apply(decisions, quiet);
     else printPlan(decisions, skipped, quiet);
 }
+
 
 function isMainModule() {
     if (!process.argv[1]) return false;
@@ -360,4 +418,4 @@ if (isMainModule()) {
     });
 }
 
-export { extensionOf, expandHome, buildLookup, plan, resolveCollision };
+export { extensionOf, expandHome, globToRegExp, compileRules, matchRule, plan, resolveCollision};

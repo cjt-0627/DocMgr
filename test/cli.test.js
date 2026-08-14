@@ -21,12 +21,16 @@ function assertInsideTestRoot(p) {
     }
 }
 
-const RULES = {
-    minAgeSeconds: 0,
-    skipExtensions: ['crdownload', 'part'],
-    neverMove: ['mobileconfig'],
-    rules: { Images: ['png', 'jpg'], Documents: ['pdf'] },
-};
+const RULES={
+    minAgeSeconds:0,
+    skipExtensions:['crdownload','part'],
+    neverMove:['mobileconfig'],
+    rules:{
+        Images:['png','jpg'],
+        Documents:['pdf'],
+        Screenshots:{match:['Screenshot *', '螢幕截圖 *']}
+    }
+}
 
 let base, dl, env;
 
@@ -101,7 +105,39 @@ test(`if the target's name is used, number ir automatically, not replace it`, as
     assert.deepEqual((await readdir(join(dl, 'Images'))).sort(), ['a(1).png', 'a.png']);
 });
 
-test('undo- undo the recent apply', async () => {
+test('a filename pattern wins over the extension rule above it', async()=>{
+    await touch('Screenshot 2026-08-13 at 15.21.45.png');
+    await touch('螢幕截圖 2026-08-13.png');
+    await touch('cat.png');
+    await docmgr('apply');
+
+    assert.deepEqual(
+        (await readdir(join(dl, 'Screenshots'))).sort(),
+        ['Screenshot 2026-08-13 at 15.21.45.png', '螢幕截圖 2026-08-13.png'],
+    );
+    assert.deepEqual(await readdir(join(dl,'Images')),['cat.png']);
+});
+
+test('plan explains which pattern matched', async()=>{
+    await touch('Screenshot 1.png');
+    const {stdout}=await docmgr();
+
+    assert.match(stdout, /Screenshots\/\s+\(name matches "Screenshot \*"\)/);
+});
+
+test('a broken rule fails with a readable config error', async()=>{
+    await writeFile(env.DOCMGR_CONFIG, JSON.stringify({...RULES, sourceDir:dl,rules:{
+        A:{}
+    }}));
+    await assert.rejects(docmgr(),(err)=>{
+        assert.equal(err.code,1);
+        assert.match(err.stderr, /config error/);
+        return true;
+    });
+
+});
+
+test('undo - undo the recent apply', async () => {
     await touch('a.png');
     await touch('b.pdf');
     await docmgr('apply');

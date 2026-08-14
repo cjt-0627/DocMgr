@@ -4,6 +4,7 @@
   "skipExtensions": ["crdownload", "part", "download", "tmp", "partial"],
   "neverMove": ["mobileconfig", "rgpack"],
   "rules": {
+        "Screenshots": { "match": ["Screenshot *", "螢幕截圖 *", "螢幕擷取畫面 *", "CleanShot *", "SCR-*"] },
     "Images":     ["png", "jpg", "jpeg", "heic", "gif", "webp", "bmp", "tiff", "svg"],
     "Documents":  ["pdf", "docx", "doc", "txt", "xls", "xlsx", "ppt", "pptx", "epub", "pages", "numbers", "key"],
     "Archives":   ["zip", "tar", "gz", "tgz", "rar", "7z"],
