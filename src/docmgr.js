@@ -26,7 +26,7 @@ async function exists(p) {
     }
 }
 
-function extensionOf(filename) {
+function extensionOf(filename){
     return extname(filename).slice(1).toLowerCase();
 }
 
@@ -159,9 +159,9 @@ function plan(candidates, rules, config){
     })
 }
 
-async function hashFile(path) {
+async function hashFile(path){
     const hash = createHash('sha256');
-    for await (const chunk of createReadStream(path)) {
+    for await (const chunk of createReadStream(path)){
         hash.update(chunk);
     }
     return hash.digest('hex');
